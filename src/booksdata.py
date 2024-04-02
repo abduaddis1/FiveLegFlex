@@ -48,7 +48,7 @@ def getPlayersPointsOddsForGame(event_id):
     response = requests.get(request_url, params=params)
 
     # Initialize a dictionary to hold player odds from all bookmakers
-    player_odds_all_books = {}
+    players_odds_all_books = {}
 
     if response.status_code == 200:
         odds_data = response.json()
@@ -56,29 +56,33 @@ def getPlayersPointsOddsForGame(event_id):
         # Iterate over all bookmakers in the response
         for bookmaker in odds_data["bookmakers"]:
             bookmaker_name = bookmaker["key"]
-            # skip these 2 books (weird odds)
-            if bookmaker_name == "betrivers" or bookmaker_name == "unibet_us":
+            # Skip these 2 books (weird odds)
+            if bookmaker_name in ["betrivers", "unibet_us"]:
                 continue
-            player_odds = {}  # This will store odds for the current bookmaker
 
             for market in bookmaker["markets"]:
                 if market["key"] == MARKETS:
                     for outcome in market["outcomes"]:
                         player_name = outcome["description"]
-                        if player_name not in player_odds:
-                            # set over and under odds to None at the moment, get values in the next statement
-                            player_odds[player_name] = {
+                        if player_name not in players_odds_all_books:
+                            players_odds_all_books[player_name] = {}
+
+                        if bookmaker_name not in players_odds_all_books[player_name]:
+                            players_odds_all_books[player_name][bookmaker_name] = {
                                 "points": outcome["point"],
                                 "overOdds": None,
                                 "underOdds": None,
                             }
-                        if outcome["name"].lower() == "over":
-                            player_odds[player_name]["overOdds"] = outcome["price"]
-                        elif outcome["name"].lower() == "under":
-                            player_odds[player_name]["underOdds"] = outcome["price"]
 
-            # Add the odds from the current bookmaker to the overall dictionary
-            player_odds_all_books[bookmaker_name] = player_odds
+                        # assign overOdds and underOdds
+                        if "over" in outcome["name"].lower():
+                            players_odds_all_books[player_name][bookmaker_name][
+                                "overOdds"
+                            ] = outcome["price"]
+                        elif "under" in outcome["name"].lower():
+                            players_odds_all_books[player_name][bookmaker_name][
+                                "underOdds"
+                            ] = outcome["price"]
     else:
         print(f"Failed to retrieve data: {response.status_code}, {response.text}")
 
@@ -86,7 +90,7 @@ def getPlayersPointsOddsForGame(event_id):
     print("Remaining requests:", response.headers.get("x-requests-remaining"))
     print("Used requests:", response.headers.get("x-requests-used"))
 
-    return player_odds_all_books
+    return players_odds_all_books
 
 
 # returns a sorted list with best points props
