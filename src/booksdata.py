@@ -6,8 +6,13 @@ REGIONS = "us"
 ODDS_FORMAT = "american"
 
 
-# get NBA games for today
 def getEvents():
+    """
+    Fetches IDs for NBA games happening today.
+
+    Returns:
+        event_ids (list): A list of event IDs for today's NBA games.
+    """
     events_url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/events"
     params = {"apiKey": API_KEY}
     event_ids = []
@@ -29,8 +34,17 @@ def getEvents():
     return event_ids
 
 
-# gets all player points and creates a map of different books with player's lines and odds for event_id (game)
 def getPlayersPointsOddsForGame(event_id):
+    """
+    Retrieves player points and odds from different bookmakers for a given game.
+
+    Parameters:
+        event_id (str): The ID of the game for which to fetch player points and odds.
+
+    Returns:
+        players_odds_all_books (dict): A dictionary containing odds from all bookmakers
+                                        for each player in the game.
+    """
     EVENT_ID = event_id
     MARKETS = "player_points"
 
@@ -93,26 +107,108 @@ def getPlayersPointsOddsForGame(event_id):
     return players_odds_all_books
 
 
-# returns a sorted list with best points props
-def pointsOptimizer(game):
-    return
+def calculate_implied_probability(odds):
+    """
+    Calculates the implied probability of given American odds.
+
+    Parameters:
+        odds (int): The American odds for which to calculate the implied probability.
+
+    Returns:
+        float: The implied probability of the given odds.
+    """
+    if odds < 0:
+        return -odds / (-odds + 100)
+    else:
+        return 100 / (odds + 100)
+
+
+def find_best_props(players_data):
+    """
+    Analyzes player data to find the best betting propositions based on odds,
+    and includes all odds from all bookmakers for the top 2 players.
+
+    Parameters:
+        players_data (dict): A dictionary containing odds and points for each player
+                             across different bookmakers.
+
+    Returns:
+        top_props (list): List of the top 2 betting propositions based on the analysis.
+    """
+    all_props = []
+
+    for player, books in players_data.items():
+        player_props = []
+        # Collect all valid odds for the current player
+        for book, odds in books.items():
+            if odds.get("overOdds") is not None and odds.get("underOdds") is not None:
+                over_probability = calculate_implied_probability(odds["overOdds"])
+                under_probability = calculate_implied_probability(odds["underOdds"])
+                player_props.append(
+                    {
+                        "book": book,
+                        "points": odds["points"],
+                        "overOdds": odds["overOdds"],
+                        "underOdds": odds["underOdds"],
+                        "overProbability": over_probability,
+                        "underProbability": under_probability,
+                    }
+                )
+
+        if player_props:
+            # Find the bet with the highest implied probability among collected valid bets
+            best_bet = max(
+                player_props,
+                key=lambda x: max(x["overProbability"], x["underProbability"]),
+            )
+            # Create a comprehensive entry for this player
+            player_entry = {
+                "player": player,
+                "points": best_bet["points"],
+                "bestBet": (
+                    "over"
+                    if best_bet["overProbability"] > best_bet["underProbability"]
+                    else "under"
+                ),
+                "bestBetOdds": (
+                    best_bet["overOdds"]
+                    if best_bet["overProbability"] > best_bet["underProbability"]
+                    else best_bet["underOdds"]
+                ),
+                "bestBetProbability": max(
+                    best_bet["overProbability"], best_bet["underProbability"]
+                ),
+                "allOdds": player_props,  # Include all valid odds for this player
+            }
+            all_props.append(player_entry)
+
+    # Sort all players by the best bet probability and select the top 2
+    top_props = sorted(all_props, key=lambda x: x["bestBetProbability"], reverse=True)[
+        :2
+    ]
+    return top_props
 
 
 # main
 def main():
-    table = []
     games_ids = getEvents()
+    best_points_props = []
 
     if games_ids:
         for event_id in games_ids:
             print(f"Fetching player points odds for game ID: {event_id}")
-            table.append(getPlayersPointsOddsForGame(event_id))
-            break  # one game for now for testing
+            player_points_odds = getPlayersPointsOddsForGame(event_id)
+            recommendations = find_best_props(player_points_odds)
+            best_points_props.extend(recommendations)
     else:
         print("No NBA games found for today.")
 
+    best_points_props_sorted = sorted(
+        best_points_props, key=lambda x: x["bestBetProbability"], reverse=True
+    )
+
     print("\n\n\n\n\n\n\n\n")
-    print(table)
+    print(best_points_props_sorted)
 
 
 if __name__ == "__main__":
