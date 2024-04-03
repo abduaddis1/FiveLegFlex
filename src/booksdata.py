@@ -224,7 +224,7 @@ def main():
 
     print("\n\n\n\n\n\n\n\n")
     #print(best_points_props_sorted)
-    for d in best_points_props:
+    for d in best_points_props_sorted:
         print(f'{d['home_team']} vs {d['away_team']}: {d['player']}, {d['bestBet']} at {d['points']}.')
 
 
