@@ -108,8 +108,8 @@ def getPlayersPointsOddsForGame(event_id):
         print(f"Failed to retrieve data: {response.status_code}, {response.text}")
 
     # Print the remaining and used request counts
-    #print("Remaining requests:", response.headers.get("x-requests-remaining"))
-    #print("Used requests:", response.headers.get("x-requests-used"))
+    # print("Remaining requests:", response.headers.get("x-requests-remaining"))
+    # print("Used requests:", response.headers.get("x-requests-used"))
 
     return players_odds_all_books
 
@@ -223,9 +223,14 @@ def main():
     )
 
     print("\n\n\n\n\n\n\n\n")
-    #print(best_points_props_sorted)
+    print(best_points_props_sorted)
+    print("\n\n\n\n\n\n\n\n")
+    # print(best_points_props_sorted)
     for d in best_points_props_sorted:
-        print(f'{d['home_team']} vs {d['away_team']}: {d['player']}, {d['bestBet']} at {d['points']}.')
+        probability_percentage = round(d["bestBetProbability"] * 100, 2)
+        print(
+            f"{d['home_team']} vs {d['away_team']}: {d['player']}, {d['bestBet']} at {d['points']} ({probability_percentage}%)"
+        )
 
 
 if __name__ == "__main__":
