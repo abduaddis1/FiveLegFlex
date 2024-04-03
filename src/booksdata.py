@@ -36,14 +36,14 @@ def getEvents():
 
 def getPlayersPointsOddsForGame(event_id):
     """
-    Retrieves player points and odds from different bookmakers for a given game.
+    Retrieves player points, odds, and team names from different bookmakers for a given game.
 
     Parameters:
         event_id (str): The ID of the game for which to fetch player points and odds.
 
     Returns:
         players_odds_all_books (dict): A dictionary containing odds from all bookmakers
-                                        for each player in the game.
+                                        for each player in the game along with the team names.
     """
     EVENT_ID = event_id
     MARKETS = "player_points"
@@ -67,6 +67,10 @@ def getPlayersPointsOddsForGame(event_id):
     if response.status_code == 200:
         odds_data = response.json()
 
+        # Extract home and away team names
+        home_team = odds_data.get("home_team")
+        away_team = odds_data.get("away_team")
+
         # Iterate over all bookmakers in the response
         for bookmaker in odds_data["bookmakers"]:
             bookmaker_name = bookmaker["key"]
@@ -79,7 +83,10 @@ def getPlayersPointsOddsForGame(event_id):
                     for outcome in market["outcomes"]:
                         player_name = outcome["description"]
                         if player_name not in players_odds_all_books:
-                            players_odds_all_books[player_name] = {}
+                            players_odds_all_books[player_name] = {
+                                "home_team": home_team,
+                                "away_team": away_team,
+                            }
 
                         if bookmaker_name not in players_odds_all_books[player_name]:
                             players_odds_all_books[player_name][bookmaker_name] = {
@@ -101,8 +108,8 @@ def getPlayersPointsOddsForGame(event_id):
         print(f"Failed to retrieve data: {response.status_code}, {response.text}")
 
     # Print the remaining and used request counts
-    print("Remaining requests:", response.headers.get("x-requests-remaining"))
-    print("Used requests:", response.headers.get("x-requests-used"))
+    #print("Remaining requests:", response.headers.get("x-requests-remaining"))
+    #print("Used requests:", response.headers.get("x-requests-used"))
 
     return players_odds_all_books
 
@@ -126,7 +133,8 @@ def calculate_implied_probability(odds):
 def find_best_props(players_data):
     """
     Analyzes player data to find the best betting propositions based on odds,
-    and includes all odds from all bookmakers for the top 2 players.
+    and includes all odds from all bookmakers for the top 2 players,
+    as well as the team names they belong to.
 
     Parameters:
         players_data (dict): A dictionary containing odds and points for each player
@@ -137,10 +145,16 @@ def find_best_props(players_data):
     """
     all_props = []
 
-    for player, books in players_data.items():
+    for player, data in players_data.items():
         player_props = []
+        # Extract team names
+        home_team = data["home_team"]
+        away_team = data["away_team"]
+
         # Collect all valid odds for the current player
-        for book, odds in books.items():
+        for book, odds in data.items():
+            if book in ["home_team", "away_team"]:  # Skip team name keys
+                continue
             if odds.get("overOdds") is not None and odds.get("underOdds") is not None:
                 over_probability = calculate_implied_probability(odds["overOdds"])
                 under_probability = calculate_implied_probability(odds["underOdds"])
@@ -164,6 +178,8 @@ def find_best_props(players_data):
             # Create a comprehensive entry for this player
             player_entry = {
                 "player": player,
+                "home_team": home_team,  # Include team names
+                "away_team": away_team,
                 "points": best_bet["points"],
                 "bestBet": (
                     "over"
@@ -196,7 +212,6 @@ def main():
 
     if games_ids:
         for event_id in games_ids:
-            print(f"Fetching player points odds for game ID: {event_id}")
             player_points_odds = getPlayersPointsOddsForGame(event_id)
             recommendations = find_best_props(player_points_odds)
             best_points_props.extend(recommendations)
@@ -208,7 +223,9 @@ def main():
     )
 
     print("\n\n\n\n\n\n\n\n")
-    print(best_points_props_sorted)
+    #print(best_points_props_sorted)
+    for d in best_points_props:
+        print(f'{d['home_team']} vs {d['away_team']}: {d['player']}, {d['bestBet']} at {d['points']}.')
 
 
 if __name__ == "__main__":
