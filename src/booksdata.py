@@ -238,7 +238,7 @@ def main():
     for prop in best_props_sorted:
         probability_percentage = round(prop["bestBetProbability"] * 100, 2)
         print(
-            f"{prop['home_team']} vs {prop['away_team']}: {prop['player']}, {prop['prop_type']} {prop['bestBet']} {prop['linec']} ({probability_percentage}%)"
+            f"{prop['home_team']} vs {prop['away_team']}: {prop['player']}, {prop['prop_type']} {prop['bestBet']} {prop['line']} ({probability_percentage}%)"
         )
 
 
