@@ -8,11 +8,12 @@ ODDS_FORMAT = "american"
 
 def getEvents():
     """
-    Fetches IDs for NBA games happening today.
+    Fetches a list of event IDs for today's NBA games using The Odds API.
 
     Returns:
-        event_ids (list): A list of event IDs for today's NBA games.
+        list: A list containing the IDs of today's NBA games. Returns an empty list if no games are found or an error occurs.
     """
+
     events_url = f"https://api.the-odds-api.com/v4/sports/{SPORT}/events"
     params = {"apiKey": API_KEY}
     event_ids = []
@@ -34,19 +35,20 @@ def getEvents():
     return event_ids
 
 
-def getPlayersPointsOddsForGame(event_id):
+def getPlayersPropsOddsForGame(event_id, prop_type):
     """
-    Retrieves player points, odds, and team names from different bookmakers for a given game.
+    Retrieves betting odds for specified player propositions (e.g., points, assists, rebounds) from different bookmakers for a specific game.
 
     Parameters:
-        event_id (str): The ID of the game for which to fetch player points and odds.
+        event_id (str): The unique ID for the game.
+        prop_type (str): The type of player prop to retrieve odds for (e.g., "player_points", "player_assists", "player_rebounds").
 
     Returns:
-        players_odds_all_books (dict): A dictionary containing odds from all bookmakers
-                                        for each player in the game along with the team names.
+        dict: A dictionary mapping player names to their odds information from different bookmakers.
     """
+
     EVENT_ID = event_id
-    MARKETS = "player_points"
+    MARKETS = prop_type
 
     request_url = (
         f"https://api.the-odds-api.com/v4/sports/{SPORT}/events/{EVENT_ID}/odds"
@@ -116,38 +118,48 @@ def getPlayersPointsOddsForGame(event_id):
 
 def calculate_implied_probability(odds):
     """
-    Calculates the implied probability of given American odds.
+    Converts American odds to an implied probability percentage.
 
     Parameters:
-        odds (int): The American odds for which to calculate the implied probability.
+        odds (int): The American odds to convert.
 
     Returns:
-        float: The implied probability of the given odds.
+        float: The implied probability as a decimal. For example, 0.5 represents a 50% chance.
     """
+
     if odds < 0:
         return -odds / (-odds + 100)
     else:
         return 100 / (odds + 100)
 
 
-def find_best_props(players_data):
+def find_best_props(players_data, prop_type):
     """
-    Analyzes player data to find the best betting propositions based on odds,
-    and includes all odds from all bookmakers for the top 2 players,
-    as well as the team names they belong to.
+    Analyzes odds for player props across different bookmakers to find the best betting opportunities.
 
     Parameters:
-        players_data (dict): A dictionary containing odds and points for each player
-                             across different bookmakers.
+        players_data (dict): A nested dictionary containing each player's odds data from different bookmakers.
+        prop_type (str): The type of prop (e.g., points, assists, rebounds) that is being analyzed.
 
     Returns:
-        top_props (list): List of the top 2 betting propositions based on the analysis.
+        list: A list of dictionaries, each containing the best betting proposition for a player, including the team names, with only the top 2 by implied probability included.
     """
+
+    # Mapping from API prop types to more readable prop types
+    prop_type_mapping = {
+        "player_points": "points",
+        "player_assists": "assists",
+        "player_rebounds": "rebounds",
+    }
+
+    readable_prop_type = prop_type_mapping.get(
+        prop_type, prop_type
+    )  # Default to prop_type if not found in mapping
+
     all_props = []
 
     for player, data in players_data.items():
         player_props = []
-        # Extract team names
         home_team = data["home_team"]
         away_team = data["away_team"]
 
@@ -161,7 +173,7 @@ def find_best_props(players_data):
                 player_props.append(
                     {
                         "book": book,
-                        "points": odds["points"],
+                        "line": odds["points"],
                         "overOdds": odds["overOdds"],
                         "underOdds": odds["underOdds"],
                         "overProbability": over_probability,
@@ -175,12 +187,13 @@ def find_best_props(players_data):
                 player_props,
                 key=lambda x: max(x["overProbability"], x["underProbability"]),
             )
-            # Create a comprehensive entry for this player
+            # Create an entry for this player
             player_entry = {
                 "player": player,
-                "home_team": home_team,  # Include team names
+                "prop_type": readable_prop_type,  # Use the more readable prop type
+                "home_team": home_team,
                 "away_team": away_team,
-                "points": best_bet["points"],
+                "line": best_bet["line"],
                 "bestBet": (
                     "over"
                     if best_bet["overProbability"] > best_bet["underProbability"]
@@ -205,31 +218,27 @@ def find_best_props(players_data):
     return top_props
 
 
-# main
 def main():
+    prop_types = ["player_points", "player_assists", "player_rebounds"]
     games_ids = getEvents()
-    best_points_props = []
+    best_props = []
 
-    if games_ids:
-        for event_id in games_ids:
-            player_points_odds = getPlayersPointsOddsForGame(event_id)
-            recommendations = find_best_props(player_points_odds)
-            best_points_props.extend(recommendations)
-    else:
-        print("No NBA games found for today.")
+    # for each game
+    for event_id in games_ids:
+        # for each prop type in prop_types[]
+        for prop_type in prop_types:
+            player_odds = getPlayersPropsOddsForGame(event_id, prop_type)
+            best_props.extend(find_best_props(player_odds, prop_type))
+        break  # testing for 1 game
 
-    best_points_props_sorted = sorted(
-        best_points_props, key=lambda x: x["bestBetProbability"], reverse=True
+    best_props_sorted = sorted(
+        best_props, key=lambda x: x["bestBetProbability"], reverse=True
     )
 
-    print("\n\n\n\n\n\n\n\n")
-    print(best_points_props_sorted)
-    print("\n\n\n\n\n\n\n\n")
-    # print(best_points_props_sorted)
-    for d in best_points_props_sorted:
-        probability_percentage = round(d["bestBetProbability"] * 100, 2)
+    for prop in best_props_sorted:
+        probability_percentage = round(prop["bestBetProbability"] * 100, 2)
         print(
-            f"{d['home_team']} vs {d['away_team']}: {d['player']}, {d['bestBet']} at {d['points']} ({probability_percentage}%)"
+            f"{prop['home_team']} vs {prop['away_team']}: {prop['player']}, {prop['prop_type']} {prop['bestBet']} {prop['linec']} ({probability_percentage}%)"
         )
 
 
