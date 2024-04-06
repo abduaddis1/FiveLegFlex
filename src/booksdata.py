@@ -1,6 +1,6 @@
 import requests
 
-API_KEY = "b2257261e43d9f1c926ede0fec0c5c18"
+API_KEY = "64952666a9109e5fec98df0a0f3a9ae5"
 SPORT = "basketball_nba"
 REGIONS = "us"
 ODDS_FORMAT = "american"
@@ -147,9 +147,11 @@ def find_best_props(players_data, prop_type):
 
     # Mapping from API prop types to more readable prop types
     prop_type_mapping = {
-        "player_points": "points",
-        "player_assists": "assists",
-        "player_rebounds": "rebounds",
+        "player_points": "Points",
+        "player_assists": "Assits",
+        "player_rebounds": "Rebounds",
+        "player_threes": "3-PT Made",
+        "player_rebounds_assists": "Rebs+Asts",
     }
 
     readable_prop_type = prop_type_mapping.get(
@@ -218,9 +220,39 @@ def find_best_props(players_data, prop_type):
     return top_props
 
 
+def getPrizePicksData():
+    URL = "https://partner-api.prizepicks.com/projections?league_id=7"
+    response = requests.get(URL)
+    prizepicks_data = response.json()
+
+    # Extract relevant data
+    lines = prizepicks_data["data"]
+    players_lines = {
+        player["id"]: player["attributes"]
+        for player in prizepicks_data["included"]
+        if player["type"] == "new_player"
+    }
+
+    # Initialize lines for each player
+    for player_id in players_lines:
+        players_lines[player_id]["lines"] = {}
+
+    # Assign lines to corresponding players
+    for line in lines:
+        player_id = line["relationships"]["new_player"]["data"]["id"]
+        stat_type = line["attributes"]["stat_type"]
+        stat_line = line["attributes"]["line_score"]
+        players_lines[player_id]["lines"][stat_type] = stat_line
+
+    return players_lines
+
+
 def main():
-    prop_types = ["player_points", "player_assists", "player_rebounds"]
+
+    # prop_types = ["player_points", "player_assists", "player_rebounds", "player_threes"]
+    prop_types = ["player_points", "player_rebounds", "player_rebounds_assists"]
     games_ids = getEvents()
+    prizepicks_data = getPrizePicksData()
     best_props = []
 
     # for each game
