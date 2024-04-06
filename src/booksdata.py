@@ -143,7 +143,7 @@ def find_best_props(players_data, prop_type, prizepicks_data):
         "player_points_rebounds": "Pts+Rebs",
         "player_points_assists": "Pts+Asts",
         "player_rebounds_assists": "Rebs+Asts",
-        # Add other mappings as needed
+        # Add other mappings if needed
     }
 
     readable_prop_type = prop_type_mapping.get(
@@ -166,7 +166,7 @@ def find_best_props(players_data, prop_type, prizepicks_data):
                 player_props.append(
                     {
                         "book": book,
-                        "line": odds["points"],
+                        "line": odds["points"],  # Initially set from bookmaker data
                         "overOdds": odds["overOdds"],
                         "underOdds": odds["underOdds"],
                         "overProbability": over_probability,
@@ -176,18 +176,21 @@ def find_best_props(players_data, prop_type, prizepicks_data):
 
         # Filter props based on PrizePicks availability
         for pp_player in prizepicks_data.values():
-            # check if prop exists in both places (readable_prop_type)
             if pp_player["name"] == player and readable_prop_type in pp_player["lines"]:
+                # Use the line from PrizePicks data
+                prizepicks_line = pp_player["lines"][readable_prop_type]
+
                 best_bet = max(
                     player_props,
                     key=lambda x: max(x["overProbability"], x["underProbability"]),
                 )
+
                 player_entry = {
                     "player": player,
-                    "prop_type": readable_prop_type,
+                    "prop_type": readable_prop_type,  # Use the more readable prop type from PrizePicks
                     "home_team": home_team,
                     "away_team": away_team,
-                    "line": best_bet["line"],
+                    "line": prizepicks_line,  # Use the line from PrizePicks
                     "bestBet": (
                         "over"
                         if best_bet["overProbability"] > best_bet["underProbability"]
@@ -214,7 +217,6 @@ def getPrizePicksData():
     response = requests.get(URL)
     prizepicks_data = response.json()
 
-    # Extract relevant data
     lines = prizepicks_data["data"]
     players_lines = {
         player["id"]: player["attributes"]
@@ -226,12 +228,20 @@ def getPrizePicksData():
     for player_id in players_lines:
         players_lines[player_id]["lines"] = {}
 
-    # Assign lines to corresponding players
     for line in lines:
+        attributes = line["attributes"]
+        odds_type = attributes.get("odds_type")
+
+        # Skip lines with odds_type 'demon' or 'goblin'
+        if odds_type in ["demon", "goblin"]:
+            continue
+
         player_id = line["relationships"]["new_player"]["data"]["id"]
-        stat_type = line["attributes"]["stat_type"]
-        stat_line = line["attributes"]["line_score"]
-        players_lines[player_id]["lines"][stat_type] = stat_line
+        stat_type = attributes["stat_type"]
+        stat_line = attributes["line_score"]
+
+        if player_id in players_lines:
+            players_lines[player_id]["lines"][stat_type] = stat_line
 
     return players_lines
 
