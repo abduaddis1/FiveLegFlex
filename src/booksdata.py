@@ -1,6 +1,6 @@
 import requests
 
-API_KEY = "bdcb789cb4726966bcb7a6145383029f"
+API_KEY = "2302b6b0855b9971675ad44adbb1857b"
 SPORT = "basketball_nba"
 REGIONS = "us"
 ODDS_FORMAT = "american"
@@ -116,118 +116,10 @@ def getPlayersPropsOddsForGame(event_id, prop_type):
     return players_odds_all_books
 
 
-def calculate_implied_probability(odds):
-    """
-    Converts American odds to an implied probability percentage.
-
-    Parameters:
-        odds (int): The American odds to convert.
-
-    Returns:
-        float: The implied probability as a decimal. For example, 0.5 represents a 50% chance.
-    """
-
-    if odds < 0:
-        return -odds / (-odds + 100)
-    else:
-        return 100 / (odds + 100)
-
-
-def find_best_props(players_data, prop_type, prizepicks_data):
-    prop_type_mapping = {
-        "player_points": "Points",
-        "player_assists": "Assists",
-        "player_rebounds": "Rebounds",
-        "player_threes": "3-PT Made",
-        "player_points_rebounds_assists": "Pts+Rebs+Asts",
-        "player_points_rebounds": "Pts+Rebs",
-        "player_points_assists": "Pts+Asts",
-        "player_rebounds_assists": "Rebs+Asts",
-        # Add other mappings if needed
-    }
-
-    readable_prop_type = prop_type_mapping.get(
-        prop_type, prop_type
-    )  # Default to prop_type if not found in mapping
-
-    all_props = []
-
-    for player, data in players_data.items():
-        player_props = []
-        home_team = data["home_team"]
-        away_team = data["away_team"]
-
-        for book, odds in data.items():
-            if book in ["home_team", "away_team"]:
-                continue
-            if odds.get("overOdds") and odds.get("underOdds"):
-                over_prob = calculate_implied_probability(odds["overOdds"])
-                under_prob = calculate_implied_probability(odds["underOdds"])
-
-                #  --- fix odds for testing  (+110 and -140) ---
-                # over_prob = calculate_implied_probability(+110) .44943
-                # under_prob = calculate_implied_probability(-140) .550561
-                total_prob = over_prob + under_prob
-
-                # Normalize probabilities to remove vig
-                over_prob_vig_adjusted = over_prob / total_prob
-                under_prob_vig_adjusted = under_prob / total_prob
-
-                player_props.append(
-                    {
-                        "book": book,
-                        "line": odds["points"],  # Initially set from bookmaker data
-                        "overOdds": odds["overOdds"],
-                        "underOdds": odds["underOdds"],
-                        "overProbability": over_prob_vig_adjusted,
-                        "underProbability": under_prob_vig_adjusted,
-                    }
-                )
-
-        for pp_player in prizepicks_data.values():
-            if pp_player["name"] == player and readable_prop_type in pp_player["lines"]:
-                prizepicks_line = pp_player["lines"][readable_prop_type]
-
-                # Directly using PrizePicks line for comparison
-                matching_props = [
-                    prop for prop in player_props if prop["line"] == prizepicks_line
-                ]
-
-                if matching_props:
-                    best_bet = max(
-                        matching_props,
-                        key=lambda x: max(x["overProbability"], x["underProbability"]),
-                    )
-                    player_entry = {
-                        "player": player,
-                        "prop_type": readable_prop_type,
-                        "home_team": home_team,
-                        "away_team": away_team,
-                        "line": prizepicks_line,  # Adjusted to use PrizePicks line
-                        "bestBet": (
-                            "over"
-                            if best_bet["overProbability"]
-                            > best_bet["underProbability"]
-                            else "under"
-                        ),
-                        "bestBetOdds": (
-                            best_bet["overOdds"]
-                            if best_bet["overProbability"]
-                            > best_bet["underProbability"]
-                            else best_bet["underOdds"]
-                        ),
-                        "bestBetProbability": max(
-                            best_bet["overProbability"], best_bet["underProbability"]
-                        ),
-                        "allOdds": player_props,
-                    }
-                    all_props.append(player_entry)
-                    break
-
-    return sorted(all_props, key=lambda x: x["bestBetProbability"], reverse=True)[:2]
-
-
 def getPrizePicksData():
+    """
+    Gets props data currently live on PrizePicks.
+    """
     URL = "https://partner-api.prizepicks.com/projections?league_id=7"
     response = requests.get(URL)
     prizepicks_data = response.json()
@@ -261,6 +153,146 @@ def getPrizePicksData():
     return players_lines
 
 
+def calculate_implied_probability(odds):
+    """
+    Converts American odds to an implied probability percentage.
+
+    Parameters:
+        odds (int): The American odds to convert.
+
+    Returns:
+        float: The implied probability as a decimal. For example, 0.5 represents a 50% chance.
+    """
+
+    if odds < 0:
+        return -odds / (-odds + 100)
+    else:
+        return 100 / (odds + 100)
+
+
+def find_best_props(
+    players_data, prop_type, prizepicks_data=None, include_prizepicks=False
+):
+    prop_type_mapping = {
+        "player_points": "Points",
+        "player_assists": "Assists",
+        "player_rebounds": "Rebounds",
+        "player_threes": "3-PT Made",
+        "player_points_rebounds_assists": "Pts+Rebs+Asts",
+        "player_points_rebounds": "Pts+Rebs",
+        "player_points_assists": "Pts+Asts",
+        "player_rebounds_assists": "Rebs+Asts",
+        # can extend this mapping based on data
+    }
+
+    readable_prop_type = prop_type_mapping.get(
+        prop_type, prop_type
+    )  # default to original prop_type if not mapped
+
+    all_props = []
+
+    for player, data in players_data.items():
+        home_team = data["home_team"]
+        away_team = data["away_team"]
+        player_props = []
+
+        for book, odds in data.items():
+            if book in ["home_team", "away_team"]:
+                continue
+            if odds.get("overOdds") and odds.get("underOdds"):
+                over_prob = calculate_implied_probability(odds["overOdds"])
+                under_prob = calculate_implied_probability(odds["underOdds"])
+                total_prob = over_prob + under_prob
+                # Adjust probabilities to remove vig
+                over_prob_vig_adjusted = over_prob / total_prob
+                under_prob_vig_adjusted = under_prob / total_prob
+                player_props.append(
+                    {
+                        "book": book,
+                        "line": odds["points"],
+                        "overOdds": odds["overOdds"],
+                        "underOdds": odds["underOdds"],
+                        "overProbability": over_prob_vig_adjusted,
+                        "underProbability": under_prob_vig_adjusted,
+                    }
+                )
+
+        # if checking for lines on PrizePicks
+        if include_prizepicks and prizepicks_data:
+            for pp_player in prizepicks_data.values():
+                if (
+                    pp_player["name"] == player
+                    and readable_prop_type in pp_player["lines"]
+                ):
+                    prizepicks_line = pp_player["lines"][readable_prop_type]
+                    matching_props = [
+                        prop for prop in player_props if prop["line"] == prizepicks_line
+                    ]
+                    if matching_props:
+                        best_bet = max(
+                            matching_props,
+                            key=lambda x: max(
+                                x["overProbability"], x["underProbability"]
+                            ),
+                        )
+                        player_entry = {
+                            "player": player,
+                            "prop_type": readable_prop_type,
+                            "home_team": home_team,
+                            "away_team": away_team,
+                            "line": prizepicks_line,
+                            "bestBet": (
+                                "over"
+                                if best_bet["overProbability"]
+                                > best_bet["underProbability"]
+                                else "under"
+                            ),
+                            "bestBetOdds": (
+                                best_bet["overOdds"]
+                                if best_bet["overProbability"]
+                                > best_bet["underProbability"]
+                                else best_bet["underOdds"]
+                            ),
+                            "bestBetProbability": max(
+                                best_bet["overProbability"],
+                                best_bet["underProbability"],
+                            ),
+                        }
+                        all_props.append(player_entry)
+                        break
+        else:
+            # if PrizePicks data is not included or not wanted
+            for prop in player_props:
+                best_bet = max(
+                    player_props,
+                    key=lambda x: max(x["overProbability"], x["underProbability"]),
+                )
+                player_entry = {
+                    "player": player,
+                    "prop_type": readable_prop_type,
+                    "home_team": home_team,
+                    "away_team": away_team,
+                    "line": best_bet["line"],
+                    "bestBet": (
+                        "over"
+                        if best_bet["overProbability"] > best_bet["underProbability"]
+                        else "under"
+                    ),
+                    "bestBetOdds": (
+                        best_bet["overOdds"]
+                        if best_bet["overProbability"] > best_bet["underProbability"]
+                        else best_bet["underOdds"]
+                    ),
+                    "bestBetProbability": max(
+                        best_bet["overProbability"], best_bet["underProbability"]
+                    ),
+                }
+                all_props.append(player_entry)
+                break
+
+    return sorted(all_props, key=lambda x: x["bestBetProbability"], reverse=True)[:2]
+
+
 def main():
     prop_types = [
         "player_points",
@@ -276,15 +308,37 @@ def main():
     prizepicks_data = getPrizePicksData()
     best_props = []
 
+    """
+    # test for 1 game
+    # game = games_ids[3]
+    for prop_type in prop_types:
+        player_props_odds = getPlayersPropsOddsForGame(game, prop_type)
+        best_props.extend(
+            find_best_props(
+                player_props_odds,
+                prop_type,
+                prizepicks_data,
+                include_prizepicks=True,
+            )
+        )
+    """
+
     for event_id in games_ids:
         for prop_type in prop_types:
-            player_odds = getPlayersPropsOddsForGame(event_id, prop_type)
-            best_props.extend(find_best_props(player_odds, prop_type, prizepicks_data))
-    # break  # testing for 1 game
+            player_props_odds = getPlayersPropsOddsForGame(event_id, prop_type)
+            best_props.extend(
+                find_best_props(
+                    player_props_odds,
+                    prop_type,
+                    prizepicks_data,
+                    include_prizepicks=True,
+                )
+            )
 
+    # get top 30 props with best probablity
     best_props_sorted = sorted(
         best_props, key=lambda x: x["bestBetProbability"], reverse=True
-    )
+    )[:30]
 
     for prop in best_props_sorted:
         probability_percentage = round(prop["bestBetProbability"] * 100, 2)
