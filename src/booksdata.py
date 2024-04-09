@@ -1,6 +1,6 @@
 import requests
 
-API_KEY = "2302b6b0855b9971675ad44adbb1857b"
+API_KEY = "f3c2692ec29530c1ab4b347f5547647d"
 SPORT = "basketball_nba"
 REGIONS = "us"
 ODDS_FORMAT = "american"
@@ -120,18 +120,25 @@ def getPrizePicksData():
     """
     Gets props data currently live on PrizePicks.
     """
+
     URL = "https://partner-api.prizepicks.com/projections?league_id=7"
     response = requests.get(URL)
     prizepicks_data = response.json()
 
+    # check if 'data' is present and not empty (check if PrizePicks has props live)
+    if not prizepicks_data.get("data"):
+        print("No PrizePicks Data...")
+        return
+
     lines = prizepicks_data["data"]
+
     players_lines = {
         player["id"]: player["attributes"]
         for player in prizepicks_data["included"]
         if player["type"] == "new_player"
     }
 
-    # Initialize lines for each player
+    # initialize lines for each player
     for player_id in players_lines:
         players_lines[player_id]["lines"] = {}
 
@@ -139,7 +146,7 @@ def getPrizePicksData():
         attributes = line["attributes"]
         odds_type = attributes.get("odds_type")
 
-        # Skip lines with odds_type 'demon' or 'goblin'
+        # skip lines with odds_type 'demon' or 'goblin'
         if odds_type in ["demon", "goblin"]:
             continue
 
@@ -217,7 +224,7 @@ def find_best_props(
                     }
                 )
 
-        # if checking for lines on PrizePicks
+        # if checking for lines only on PrizePicks
         if include_prizepicks and prizepicks_data:
             for pp_player in prizepicks_data.values():
                 if (
@@ -304,8 +311,13 @@ def main():
         "player_points_assists",
         "player_rebounds_assists",
     ]
-    games_ids = getEvents()
+
     prizepicks_data = getPrizePicksData()
+    if not prizepicks_data:
+        # exit program
+        return
+
+    games_ids = getEvents()
     best_props = []
 
     """
